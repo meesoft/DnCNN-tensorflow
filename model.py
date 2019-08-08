@@ -9,7 +9,7 @@ import cv2
 def dncnn(input, is_training=True, output_channels=3):
     with tf.variable_scope('block1'):
         output = tf.layers.conv2d(input, 64, 3, padding='same', activation=tf.nn.relu)
-    for layers in xrange(2, 19+1):
+    for layers in range(2, 19+1):
         with tf.variable_scope('block%d' % layers):
             output = tf.layers.conv2d(output, 64, 3, padding='same', name='conv%d' % layers, use_bias=False)
             output = tf.nn.relu(tf.layers.batch_normalization(output, training=is_training))   
@@ -21,7 +21,7 @@ filepaths = glob('./data/train/original/*.png') #takes all the paths of the png 
 filepaths = sorted(filepaths)                           #Order the list of files
 filepaths_noisy = glob('./data/train/noisy/*.png')
 filepaths_noisy = sorted(filepaths_noisy)
-ind = range(len(filepaths))
+ind = list(range(len(filepaths)))
 
 class denoiser(object):
     def __init__(self, sess, input_c_dim=3, batch_size=128):
@@ -48,7 +48,7 @@ class denoiser(object):
         print("[*] Evaluating...")
         psnr_sum = 0
         
-        for i in xrange(10):
+        for i in range(10):
             clean_image = cv2.imread(eval_files[i])
             clean_image = clean_image.astype('float32') / 255.0
             clean_image = clean_image[np.newaxis, ...]
@@ -94,10 +94,10 @@ class denoiser(object):
         print("[*] Start training, with start epoch %d start iter %d : " % (start_epoch, iter_num))
         start_time = time.time()
         self.evaluate(iter_num, eval_files, noisy_files, summary_writer=writer)  # eval_data value range is 0-255
-        for epoch in xrange(start_epoch, epoch):
+        for epoch in range(start_epoch, epoch):
             batch_noisy = np.zeros((batch_size,64,64,3),dtype='float32')
             batch_images = np.zeros((batch_size,64,64,3),dtype='float32')
-            for batch_id in xrange(start_step, numBatch):
+            for batch_id in range(start_step, numBatch):
               try:
                 res = self.dataset.get_batch() # If we get an error retrieving a batch of patches we have to reinitialize the dataset
               except KeyboardInterrupt:
@@ -108,7 +108,7 @@ class denoiser(object):
               if batch_id==0:
                 batch_noisy = np.zeros((batch_size,64,64,3),dtype='float32')
                 batch_images = np.zeros((batch_size,64,64,3),dtype='float32')
-              ind1 = range(res.shape[0]/2)
+              ind1 = range(res.shape[0]//2)
               ind1 = np.multiply(ind1,2)
               for i in range(batch_size):
                 random.shuffle(ind1)
@@ -151,11 +151,15 @@ class denoiser(object):
             full_path = tf.train.latest_checkpoint(checkpoint_dir)
             global_step = int(full_path.split('/')[-1].split('-')[-1])
             saver.restore(self.sess, full_path)
+            
+            #tf.compat.v1.saved_model.simple_save(self.sess, './savedmodel', inputs={"X": X, "Y_": Y_}, outputs={"Y": Y})
+            #self.save(global_step, './savedmodel')
+            
             return True, global_step
         else:
             return False, 0
 
-    def test(self, eval_files, noisy_files, ckpt_dir, save_dir, temporal):
+    def test(self, eval_files, noisy_files, ckpt_dir, save_dir):
         """Test DnCNN"""
         # init variables
         tf.global_variables_initializer().run()
@@ -165,7 +169,7 @@ class denoiser(object):
         print(" [*] Load weights SUCCESS...")
         psnr_sum = 0
             
-        for i in xrange(len(eval_files)):
+        for i in range(len(eval_files)):
             clean_image = cv2.imread(eval_files[i])
             clean_image = clean_image.astype('float32') / 255.0
             clean_image = clean_image[np.newaxis, ...]
@@ -201,7 +205,7 @@ class dataset(object):
     random.shuffle(ind)
     
     filenames = list()
-    for i in xrange(len(filepaths)):
+    for i in range(len(filepaths)):
         filenames.append(filepaths_noisy[ind[i]])
         filenames.append(filepaths[ind[i]])
 
@@ -254,6 +258,8 @@ def cal_psnr(im1, im2): # PSNR function for 0-255 values
     
 def psnr_scaled(im1, im2): # PSNR function for 0-1 values
     mse = ((im1 - im2) ** 2).mean()
+    if mse == 0:
+      return 0
     mse = mse * (255 ** 2)
     psnr = 10 * np.log10(255 **2 / mse)
     return psnr
