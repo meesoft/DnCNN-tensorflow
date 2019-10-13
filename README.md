@@ -30,7 +30,7 @@ The average PSNR(dB) results of different methods on the BSD68 dataset.
 
 ## Requirements
 ```
-tensorflow >= 1.4
+tensorflow >= 1.13
 numpy
 opencv
 ```
@@ -62,12 +62,4 @@ $ python main.py
 ```
 $ python main.py --phase test
 ```
-
-
-
-
-
-
-
-
-
+Note that running the test will also export the frozen session to saved_model.pb
