@@ -13,11 +13,11 @@ def dncnn(input, is_training=True, output_channels=3):
     layer += 1
     for layers in range(2, 19 + 1):
         with tf.variable_scope('block%d' % layer):
-            output = tf.layers.conv2d(output, 64, 3, padding='same', name='conv%d' % layers, use_bias=False)
+            output = tf.layers.conv2d(output, 64, 3, padding='same', name='conv%d' % layer, use_bias=False)
             output = tf.nn.relu(tf.layers.batch_normalization(output, training=is_training))   
         layer += 1
     with tf.variable_scope('block%d' % layer):
-        output = tf.layers.conv2d(output, output_channels, 3, padding='same',use_bias=False)
+        output = tf.layers.conv2d(output, output_channels, 3, padding='same', use_bias=False)
     return input - output
 
 filepaths = glob('./data/train/original/*.png') #takes all the paths of the png files in the train folder
@@ -31,11 +31,10 @@ class denoiser(object):
         self.sess = sess
         self.input_c_dim = input_c_dim
         # build model
-        self.Y_ = tf.placeholder(tf.float32, [None, None, None, self.input_c_dim],
-                                 name='clean_image')
+        self.Y_ = tf.placeholder(tf.float32, [None, None, None, self.input_c_dim], name='clean_image')
         self.is_training = tf.placeholder(tf.bool, name='is_training')
-        self.X = tf.placeholder(tf.float32, [None, None, None, self.input_c_dim])
-        self.Y = dncnn(self.X, is_training=self.is_training)
+        self.X = tf.placeholder(tf.float32, [None, None, None, self.input_c_dim], name='noisy')
+        self.Y = tf.identity(dncnn(self.X, is_training=self.is_training), name='denoised')
         self.loss = (1.0 / batch_size) * tf.nn.l2_loss(self.Y_ - self.Y)
         self.lr = tf.placeholder(tf.float32, name='learning_rate')
         self.dataset = dataset(sess)
@@ -134,7 +133,7 @@ class denoiser(object):
             if np.mod(epoch + 1, eval_every_epoch) == 0: ##Evaluate and save model
                 self.evaluate(iter_num, eval_files, noisy_files, summary_writer=writer)
                 self.save(iter_num, ckpt_dir)
-        print("[*] Training finished.")
+        print("[*] Training finished.")   
 
     def save(self, iter_num, ckpt_dir, model_name='DnCNN-tensorflow'):
         saver = tf.train.Saver()
@@ -155,8 +154,12 @@ class denoiser(object):
             global_step = int(full_path.split('/')[-1].split('-')[-1])
             saver.restore(self.sess, full_path)
             
-            #tf.compat.v1.saved_model.simple_save(self.sess, './savedmodel', inputs={"X": X, "Y_": Y_}, outputs={"Y": Y})
+            #tf.compat.v1.saved_model.simple_save(self.sess, './savedmodel', inputs={"X": self.X, "Y_": self.Y_}, outputs={"Y": self.Y})
             #self.save(global_step, './savedmodel')
+
+            frozen_graph = freeze_session(self.sess, output_names=[self.Y.op.name])
+            tf.train.write_graph(frozen_graph, "./savedmodel", "saved_model.pb", as_text=False)
+            print("Saved, input=%s, output=%s" % (self.X.op.name, self.Y.op.name))
             
             return True, global_step
         else:
@@ -246,8 +249,8 @@ def get_patches(image, num_patches=128, patch_size=64):
     """Get `num_patches` from the image"""
     patches = []
     for i in range(num_patches):
-      point1 = random.randint(0,116) # 116 comes from the image source size (180) - the patch dimension (64)
-      point2 = random.randint(0,116)
+      point1 = random.randint(0, 180 - patch_size) # 116 comes from the image source size (180) - the patch dimension (64)
+      point2 = random.randint(0, 180 - patch_size)
       patch = tf.image.crop_to_bounding_box(image, point1, point2, patch_size, patch_size)
       patches.append(patch)
     patches = tf.stack(patches)
@@ -266,3 +269,30 @@ def psnr_scaled(im1, im2): # PSNR function for 0-1 values
     mse = mse * (255 ** 2)
     psnr = 10 * np.log10(255 **2 / mse)
     return psnr
+
+def freeze_session(session, keep_var_names=None, output_names=None, clear_devices=True):
+    """
+    Freezes the state of a session into a pruned computation graph.
+    Creates a new computation graph where variable nodes are replaced by
+    constants taking their current value in the session. The new graph will be
+    pruned so subgraphs that are not necessary to compute the requested
+    outputs are removed.
+    @param session The TensorFlow session to be frozen.
+    @param keep_var_names A list of variable names that should not be frozen,
+                        or None to freeze all the variables in the graph.
+    @param output_names Names of the relevant graph outputs.
+    @param clear_devices Remove the device directives from the graph for better portability.
+    @return The frozen graph definition.
+    """
+    graph = session.graph
+    with graph.as_default():
+        freeze_var_names = list(set(v.op.name for v in tf.global_variables()).difference(keep_var_names or []))
+        output_names = output_names or []
+        output_names += [v.op.name for v in tf.global_variables()]
+        input_graph_def = graph.as_graph_def()
+        if clear_devices:
+            for node in input_graph_def.node:
+                node.device = ""
+        frozen_graph = tf.graph_util.convert_variables_to_constants(
+            session, input_graph_def, output_names, freeze_var_names)
+        return frozen_graph   

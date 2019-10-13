@@ -6,6 +6,8 @@ from model import denoiser
 import os
 import numpy as np
 
+#tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+
 parser = argparse.ArgumentParser(description='')
 parser.add_argument('--epoch', dest='epoch', type=int, default=10, help='# of epochs')
 parser.add_argument('--batch_size', dest='batch_size', type=int, default=128, help='# images in batch')
@@ -51,8 +53,8 @@ def main(_):
     if args.use_gpu:
         # added to control the gpu memory
         print("GPU\n")
-        gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.9)
-        #gpu_options = tf.GPUOptions(allow_growth = True)
+        #gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.9)
+        gpu_options = tf.GPUOptions(allow_growth = True)
         with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
             model = denoiser(sess)
             if args.phase == 'train':
