@@ -7,13 +7,16 @@ import os
 import cv2
 
 def dncnn(input, is_training=True, output_channels=3):
-    with tf.variable_scope('block1'):
+    layer = 1
+    with tf.variable_scope('block%d' % layer):
         output = tf.layers.conv2d(input, 64, 3, padding='same', activation=tf.nn.relu)
-    for layers in range(2, 19+1):
-        with tf.variable_scope('block%d' % layers):
+    layer += 1
+    for layers in range(2, 19 + 1):
+        with tf.variable_scope('block%d' % layer):
             output = tf.layers.conv2d(output, 64, 3, padding='same', name='conv%d' % layers, use_bias=False)
             output = tf.nn.relu(tf.layers.batch_normalization(output, training=is_training))   
-    with tf.variable_scope('block17'):
+        layer += 1
+    with tf.variable_scope('block%d' % layer):
         output = tf.layers.conv2d(output, output_channels, 3, padding='same',use_bias=False)
     return input - output
 
