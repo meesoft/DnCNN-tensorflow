@@ -6,7 +6,7 @@ import random
 import os
 import cv2
 
-def dncnn(input, is_training=True, output_channels=3):
+def dncnn(input, is_training, output_channels=3):
     layer = 1
     with tf.variable_scope('block%d' % layer):
         output = tf.layers.conv2d(input, 64, 3, padding='same', activation=tf.nn.relu)
@@ -18,7 +18,7 @@ def dncnn(input, is_training=True, output_channels=3):
         layer += 1
     with tf.variable_scope('block%d' % layer):
         output = tf.layers.conv2d(output, output_channels, 3, padding='same', use_bias=False)
-    return input - output
+    return input - output # Residual learning
 
 filepaths = glob('./data/train/original/*.png') #takes all the paths of the png files in the train folder
 filepaths = sorted(filepaths)                           #Order the list of files
@@ -59,9 +59,7 @@ class denoiser(object):
             noisy = noisy[np.newaxis, ...]
             
             output_clean_image = self.sess.run(
-                [self.Y],feed_dict={self.Y_: clean_image,
-                           self.X: noisy,
-                           self.is_training: False})
+                [self.Y],feed_dict={self.Y_: clean_image, self.X: noisy, self.is_training: False})
             psnr = psnr_scaled(clean_image, output_clean_image)
             print("img%d PSNR: %.2f" % (i + 1, psnr))
             psnr_sum += psnr
@@ -91,7 +89,7 @@ class denoiser(object):
         tf.summary.scalar('lr', self.lr)
         writer = tf.summary.FileWriter('./logs', self.sess.graph)
         merged = tf.summary.merge_all()
-        clip_all_weights = tf.get_collection("max_norm")        
+        clip_all_weights = tf.get_collection("max_norm")
 
         print("[*] Start training, with start epoch %d start iter %d : " % (start_epoch, iter_num))
         start_time = time.time()
@@ -99,6 +97,7 @@ class denoiser(object):
         for epoch in range(start_epoch, epoch):
             batch_noisy = np.zeros((batch_size,64,64,3),dtype='float32')
             batch_images = np.zeros((batch_size,64,64,3),dtype='float32')
+            lossSum = 0
             for batch_id in range(start_step, numBatch):
               try:
                 res = self.dataset.get_batch() # If we get an error retrieving a batch of patches we have to reinitialize the dataset
@@ -123,16 +122,23 @@ class denoiser(object):
               _, loss, summary = self.sess.run([self.train_op, self.loss, merged],
                                                  feed_dict={self.Y_: batch_images, self.X: batch_noisy, self.lr: lr[epoch],
                                                             self.is_training: True})
-              self.sess.run(clip_all_weights)          
+              self.sess.run(clip_all_weights)
               
               print("Epoch: [%2d] [%4d/%4d] time: %4.4f, loss: %.6f"
                     % (epoch + 1, batch_id + 1, numBatch, time.time() - start_time, loss))
               iter_num += 1
+              lossSum += loss
               writer.add_summary(summary, iter_num)
               
             if np.mod(epoch + 1, eval_every_epoch) == 0: ##Evaluate and save model
                 self.evaluate(iter_num, eval_files, noisy_files, summary_writer=writer)
                 self.save(iter_num, ckpt_dir)
+
+            logEntry = "--- Epoch [%2d] Average loss %.2f ---\n" % (epoch + 1, lossSum / numBatch)
+            print(logEntry)
+            with open("log.txt", "a") as file_object:
+                file_object.write(logEntry)
+            
         print("[*] Training finished.")   
 
     def save(self, iter_num, ckpt_dir, model_name='DnCNN-tensorflow'):
@@ -245,7 +251,7 @@ def im_read(filename):
     image = tf.image.convert_image_dtype(image_decoded, tf.float32)
     return image
     
-def get_patches(image, num_patches=128, patch_size=64):
+def get_patches(image, num_patches, patch_size):
     """Get `num_patches` from the image"""
     patches = []
     for i in range(num_patches):
