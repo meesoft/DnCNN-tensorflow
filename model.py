@@ -7,16 +7,16 @@ import os
 import cv2
 
 def dncnn(input, is_training, output_channels=3):
-    layer = 1
-    with tf.variable_scope('block%d' % layer):
+    layerIndex = 1
+    with tf.variable_scope('block%d' % layerIndex):
         output = tf.layers.conv2d(input, 64, 3, padding='same', activation=tf.nn.relu)
-    layer += 1
+    layerIndex += 1
     for layers in range(2, 19 + 1):
-        with tf.variable_scope('block%d' % layer):
-            output = tf.layers.conv2d(output, 64, 3, padding='same', name='conv%d' % layer, use_bias=False)
+        with tf.variable_scope('block%d' % layerIndex):
+            output = tf.layers.conv2d(output, 64, 3, padding='same', name='conv%d' % layerIndex, use_bias=False)
             output = tf.nn.relu(tf.layers.batch_normalization(output, training=is_training))   
-        layer += 1
-    with tf.variable_scope('block%d' % layer):
+        layerIndex += 1
+    with tf.variable_scope('block%d' % layerIndex):
         output = tf.layers.conv2d(output, output_channels, 3, padding='same', use_bias=False)
     return input - output # Residual learning
 
@@ -134,7 +134,7 @@ class denoiser(object):
                 self.evaluate(iter_num, eval_files, noisy_files, summary_writer=writer)
                 self.save(iter_num, ckpt_dir)
 
-            logEntry = "--- Epoch [%2d] Average loss %.2f ---\n" % (epoch + 1, lossSum / numBatch)
+            logEntry = "--- Epoch [%2d] Average loss %.6f ---\n" % (epoch + 1, lossSum / numBatch)
             print(logEntry)
             with open("log.txt", "a") as file_object:
                 file_object.write(logEntry)
