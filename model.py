@@ -36,6 +36,8 @@ class denoiser(object):
         self.X = tf.placeholder(tf.float32, [None, None, None, self.input_c_dim], name='noisy')
         self.Y = tf.identity(dncnn(self.X, is_training=self.is_training), name='denoised')
         self.loss = (1.0 / batch_size) * tf.nn.l2_loss(self.Y_ - self.Y)
+        #self.loss = (1.0 / batch_size) * tf.reduce_sum(tf.square(self.Y_ - self.Y)) * 0.5
+        #self.loss = (1.0 / batch_size) * tf.reduce_sum(tf.abs(self.Y_ - self.Y))
         self.lr = tf.placeholder(tf.float32, name='learning_rate')
         self.dataset = dataset(sess)
         optimizer = tf.train.AdamOptimizer(self.lr, name='AdamOptimizer')
@@ -46,7 +48,7 @@ class denoiser(object):
         self.sess.run(init)
         print("[*] Initialize model successfully...")
 
-    def evaluate(self, iter_num, eval_files, noisy_files, summary_writer):
+    def evaluate(self, iter_num, eval_files, noisy_files):
         print("[*] Evaluating...")
         psnr_sum = 0
         
@@ -87,13 +89,13 @@ class denoiser(object):
         # make summary
         tf.summary.scalar('loss', self.loss)
         tf.summary.scalar('lr', self.lr)
-        writer = tf.summary.FileWriter('./logs', self.sess.graph)
+        #writer = tf.summary.FileWriter('./logs', self.sess.graph)
         merged = tf.summary.merge_all()
         clip_all_weights = tf.get_collection("max_norm")
 
         print("[*] Start training, with start epoch %d start iter %d : " % (start_epoch, iter_num))
         start_time = time.time()
-        self.evaluate(iter_num, eval_files, noisy_files, summary_writer=writer)  # eval_data value range is 0-255
+        self.evaluate(iter_num, eval_files, noisy_files)  # eval_data value range is 0-255
         for epoch in range(start_epoch, epoch):
             batch_noisy = np.zeros((batch_size,64,64,3),dtype='float32')
             batch_images = np.zeros((batch_size,64,64,3),dtype='float32')
@@ -128,13 +130,13 @@ class denoiser(object):
                     % (epoch + 1, batch_id + 1, numBatch, time.time() - start_time, loss))
               iter_num += 1
               lossSum += loss
-              writer.add_summary(summary, iter_num)
+              #writer.add_summary(summary, iter_num)
               
             if np.mod(epoch + 1, eval_every_epoch) == 0: ##Evaluate and save model
-                self.evaluate(iter_num, eval_files, noisy_files, summary_writer=writer)
+                self.evaluate(iter_num, eval_files, noisy_files)
                 self.save(iter_num, ckpt_dir)
 
-            logEntry = "--- Epoch [%2d] Average loss %.6f ---\n" % (epoch + 1, lossSum / numBatch)
+            logEntry = "--- Epoch [%d] Average loss %.6f ---\n" % (epoch + 1, lossSum / numBatch)
             print(logEntry)
             with open("log.txt", "a") as file_object:
                 file_object.write(logEntry)
