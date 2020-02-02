@@ -138,7 +138,7 @@ class denoiser(object):
 
             logEntry = "--- Epoch [%d] Average loss %.6f ---\n" % (epoch + 1, lossSum / numBatch)
             print(logEntry)
-            with open("log.txt", "a") as file_object:
+            with open(ckpt_dir + "/log.txt", "a") as file_object:
                 file_object.write(logEntry)
             
         print("[*] Training finished.")   
